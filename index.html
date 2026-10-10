@@ -1,1 +1,301 @@
 
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>primella review </title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #fff7fb;
+      color: #594454;
+    }
+
+    header {
+      background: linear-gradient(135deg, #f6d6e6, #e9ddff);
+      text-align: center;
+      padding: 35px 16px;
+    }
+
+    header h1 {
+      font-size: 38px;
+      letter-spacing: 2px;
+      margin: 0;
+    }
+
+    header p { margin-bottom: 0; }
+
+    main {
+      width: min(100% - 28px, 650px);
+      margin: 24px auto;
+    }
+
+    .panel, .review {
+      background: white;
+      border: 1px solid #f0dce9;
+      border-radius: 18px;
+      padding: 18px;
+      margin-bottom: 18px;
+      box-shadow: 0 4px 15px #b68ca514;
+    }
+
+    h2 { margin-top: 0; }
+
+    label {
+      display: block;
+      margin: 14px 0 6px;
+      font-weight: bold;
+    }
+
+    input, textarea, select, button {
+      width: 100%;
+      font: inherit;
+      padding: 12px;
+      border-radius: 10px;
+    }
+
+    input, textarea, select {
+      border: 1px solid #e6d4e1;
+      background: #fffafd;
+      color: #594454;
+    }
+
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    button {
+      margin-top: 16px;
+      border: 0;
+      background: #d99cbd;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .6;
+      cursor: wait;
+    }
+
+    .stars {
+      color: #efa83c;
+      font-size: 21px;
+      letter-spacing: 2px;
+    }
+
+    .meta {
+      font-size: 13px;
+      color: #9a8294;
+    }
+
+    #status, #empty {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: #9a8294;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>primella ♡</h1>
+    <p> Thank you </p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>เขียนรีวิวของคุณ </h2>
+
+
+      <form id="reviewForm">
+        <label for="name">name</label>
+        <input id="name" maxlength="40"
+
+
+        <label for="product">รีวิวเกี่ยวกับอะไร</label>
+        <input id="product" maxlength="100"
+          placeholder="ป้าย หรืออื่น ๆ" required>
+
+        <label for="rating">ให้คะแนน</label>
+        <select id="rating" required>
+          <option value="5">★★★★★ — ดีมาก</option>
+          <option value="4">★★★★☆ — ดี</option>
+          <option value="3">★★★☆☆ — ปานกลาง</option>
+          <option value="2">★★☆☆☆ — พอใช้</option>
+          <option value="1">★☆☆☆☆ — ควรปรับปรุง</option>
+        </select>
+
+        <label for="comment">รายละเอียดรีวิว</label>
+        <textarea id="comment" maxlength="2000"
+
+
+        <button id="submitBtn" type="submit">ส่งรีวิว ♡</button>
+      </form>
+
+      <p id="status" role="status"></p>
+    </section>
+
+    <section>
+      <h2>all review</h2>
+      <p id="empty">กำลังโหลดรีวิว...</p>
+      <div id="reviews"></div>
+      <button id="loadMore" type="button" hidden>
+        โหลดรีวิวเพิ่มเติม
+      </button>
+    </section>
+  </main>
+
+  <footer>made with ♡ by primella</footer>
+
+  <script>
+    // ใส่ข้อมูล Supabase ของโปรเจกต์ตัวเองตรงนี้
+    const SUPABASE_URL = "https://dhldzymkikwywddbscve.supabase.co";
+    const SUPABASE_KEY = "ใส่_PUBLISHABLE_KEY_ของคุณตรงนี้";
+
+    const statusEl = document.getElementById("status");
+    const reviewsEl = document.getElementById("reviews");
+    const emptyEl = document.getElementById("empty");
+    const submitBtn = document.getElementById("submitBtn");
+    const loadMoreBtn = document.getElementById("loadMore");
+
+    let db = null;
+    let page = 0;
+    const pageSize = 10;
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function makeElement(tag, className, text) {
+      const el = document.createElement(tag);
+      if (className) el.className = className;
+      if (text !== undefined) el.textContent = text;
+      return el;
+    }
+
+    function showReview(review) {
+      const card = makeElement("article", "review");
+      const title = makeElement("h3", "", review.product);
+      const author = makeElement("p", "meta",
+        "โดย " + review.name + " · " +
+        new Date(review.created_at).toLocaleDateString("th-TH"));
+      const stars = makeElement("div", "stars",
+        "★".repeat(review.rating) + "☆".repeat(5 - review.rating));
+      const comment = makeElement("p", "", review.comment);
+
+      card.append(title, author, stars, comment);
+      reviewsEl.appendChild(card);
+    }
+
+    async function loadReviews(reset = false) {
+      if (!db) {
+        emptyEl.textContent =
+          "ยังไม่ได้ตั้งค่า Supabase กรุณาใส่ Publishable Key ก่อน";
+        return;
+      }
+
+      if (reset) {
+        page = 0;
+        reviewsEl.replaceChildren();
+      }
+
+      emptyEl.textContent = "กำลังโหลดรีวิว...";
+
+      const start = page * pageSize;
+      const end = start + pageSize - 1;
+
+      const { data, error } = await db
+        .from("reviews")
+        .select("id,name,product,rating,comment,created_at")
+        .order("created_at", { ascending: false })
+        .range(start, end);
+
+      if (error) {
+        emptyEl.textContent =
+          "โหลดรีวิวไม่สำเร็จ กรุณาตรวจสอบตารางและสิทธิ์ Supabase";
+        console.error(error);
+        return;
+      }
+
+      if (reset && data.length === 0) {
+        emptyEl.textContent = "ยังไม่มีรีวิว มาเป็นคนแรกกันนะ ♡";
+      } else {
+        emptyEl.textContent = "";
+      }
+
+      data.forEach(showReview);
+      page++;
+
+      loadMoreBtn.hidden = data.length < pageSize;
+    }
+
+    document.getElementById("reviewForm")
+      .addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        if (!db) {
+          setStatus("กรุณาตั้งค่า Publishable Key ก่อนส่งรีวิว");
+          return;
+        }
+
+        submitBtn.disabled = true;
+        setStatus("กำลังส่งรีวิว...");
+
+        const review = {
+          name: document.getElementById("name").value.trim(),
+          product: document.getElementById("product").value.trim(),
+          rating: Number(document.getElementById("rating").value),
+          comment: document.getElementById("comment").value.trim()
+        };
+
+        if (!review.name || !review.product || !review.comment) {
+          setStatus("กรุณากรอกข้อมูลให้ครบ");
+          submitBtn.disabled = false;
+          return;
+        }
+
+        const { error } = await db.from("reviews").insert([review]);
+
+        if (error) {
+          console.error(error);
+          setStatus("ส่งรีวิวไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า Supabase");
+        } else {
+          setStatus("ส่งรีวิวสำเร็จแล้ว ขอบคุณที่แบ่งปันนะ ♡");
+          event.target.reset();
+          await loadReviews(true);
+        }
+
+        submitBtn.disabled = false;
+      });
+
+    loadMoreBtn.addEventListener("click", () => loadReviews());
+
+    if (
+      window.supabase &&
+      SUPABASE_KEY !== "ใส่_PUBLISHABLE_KEY_ของคุณตรงนี้"
+    ) {
+      db = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+      );
+      loadReviews(true);
+    } else {
+      emptyEl.textContent =
+        "เว็บพร้อมแล้ว เหลือใส่ Publishable Key และตั้งค่าตารางรีวิว";
+    }
+  </script>
+</body>
+</html>
+
